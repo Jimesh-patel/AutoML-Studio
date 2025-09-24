@@ -5,6 +5,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
 from sklearn.impute import SimpleImputer, KNNImputer
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
+
+
 
 # Page Config
 st.set_page_config(page_title="AutoML-Studio", layout="wide")
@@ -243,8 +246,84 @@ if uploaded_file:
     if st.button("Reset Changes"):
         st.session_state.df_copy = st.session_state.df_original.copy()
         st.success("Dataset has been reset to original state.")
+        
+    st.markdown("---")
     
+# --- Scaling & Encoding ---
     
+    st.header("Scaling & Encoding")
+
+    # Create copy for X (without target for now)
+    X = st.session_state.df_copy.copy()
+
+    num_cols = X.select_dtypes(include=np.number).columns.tolist()
+    cat_cols = X.select_dtypes(exclude=np.number).columns.tolist()
+
+    with st.expander("Scale Numerical Features"):
+        if num_cols:
+            selected_scale_cols = st.multiselect("Select Numeric Columns to Scale", num_cols, key="scale_cols")
+
+            scaler_option = st.selectbox("Choose a Scaler", ["StandardScaler", "MinMaxScaler", "RobustScaler"])
+
+            if st.button("Scale Selected Columns"):
+                if selected_scale_cols:
+                    scaler_map = {
+                        "StandardScaler": StandardScaler(),
+                        "MinMaxScaler": MinMaxScaler(),
+                        "RobustScaler": RobustScaler()
+                    }
+
+                    try:
+                        scaler = scaler_map[scaler_option]
+                        scaled_values = scaler.fit_transform(X[selected_scale_cols])
+                        st.session_state.df_copy[selected_scale_cols] = scaler.fit_transform(X[selected_scale_cols])
+                        st.success(f"Columns scaled using {scaler_option}.")
+                        st.dataframe(st.session_state.df_copy[selected_scale_cols].head())
+                    except Exception as e:
+                        st.warning(f"Scaling Error: {str(e)}")
+                else:
+                    st.warning("Please select at least one column to scale.")
+        else:
+            st.warning("No numeric columns to scale.")
+
+    with st.expander("Encode Categorical Features"):
+        if cat_cols:
+            selected_encode_cols = st.multiselect("Select Categorical Columns to Encode", cat_cols, key="encode_cols")
+
+            encoding_type = st.selectbox("Choose Encoding Method", ["Label Encoding", "One-Hot Encoding"])
+
+            if st.button("Encode Selected Columns"):
+                if selected_encode_cols:
+                    try:
+                        if encoding_type == "Label Encoding":
+                            for col in selected_encode_cols:
+                                le = LabelEncoder()
+                                st.session_state.df_copy[col] = le.fit_transform(st.session_state.df_copy[col].astype(str))
+                            st.success("Label Encoding applied.")
+                            st.dataframe(st.session_state.df_copy[selected_encode_cols].head())
+
+                        elif encoding_type == "One-Hot Encoding":
+                            try:
+                                original_columns = st.session_state.df_copy.columns.tolist()
+                                st.session_state.df_copy = pd.get_dummies(
+                                    st.session_state.df_copy, columns=selected_encode_cols, drop_first=True
+                                )
+
+                                new_columns = [col for col in st.session_state.df_copy.columns if col not in original_columns]
+                                st.session_state.cat_cols = [
+                                    col for col in cat_cols if col not in selected_encode_cols
+                                ] + new_columns
+
+                                st.success("One-Hot Encoding applied.")
+                                st.dataframe(st.session_state.df_copy.head())
+                            except Exception as e:
+                                st.warning(f"Encoding Error: {str(e)}")
+                    except Exception as e:
+                        st.warning(f"Encoding Error: {str(e)}")
+                else:
+                    st.warning("Please select at least one column to encode.")
+        else:
+            st.info("No categorical columns to encode.")
 
 
 
