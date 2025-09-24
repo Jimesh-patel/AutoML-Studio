@@ -129,6 +129,30 @@ if uploaded_file:
 
     st.info("You've completed the EDA section. Now you can move to preprocessing!")
     st.markdown("---")
+    
+    # ---Feature Extraction ---
+    st.markdown("## Feature Selection")
+    with st.expander("Drop Unwanted Columns"):
+        drop_cols = st.multiselect("Select columns to drop from dataset", st.session_state.df_copy.columns.tolist(), key="drop_cols")
+        if st.button("Drop Selected Columns"):
+            st.session_state.df_copy.drop(columns=drop_cols, inplace=True)
+            st.success(f"Dropped columns: {', '.join(drop_cols)}")
+            st.dataframe(st.session_state.df_copy.head())
+
+    num_cols = st.session_state.df_copy.select_dtypes(include=np.number).columns.tolist()
+    if num_cols:
+        if st.button("Show Correlation Heatmap"):
+            corr_matrix = st.session_state.df_copy[num_cols].corr()
+            fig, ax = plt.subplots(figsize=(8, 3))  
+            sns.heatmap(corr_matrix,annot=True,cmap="coolwarm",fmt=".2f",cbar=True)
+            plt.xticks(fontsize=8, rotation=0)  
+            plt.yticks(fontsize=8)   
+            st.pyplot(fig)
+    else:
+        st.info("No numerical features to generate correlation heatmap.")
+    
+    st.markdown("---")
+
 
 
 
