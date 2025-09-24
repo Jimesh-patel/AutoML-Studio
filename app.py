@@ -512,4 +512,376 @@ if uploaded_file:
     else:
         st.info("Please select at least two models to compare.")
 
-    
+
+# --- Model Building Section ---
+
+    st.markdown("---")
+    st.subheader("Model Selection")
+
+    # Check if train-test has been done
+    if 'y_train' not in st.session_state:
+        st.warning("Please perform Train-Test Split before building the model.")
+    else:
+        y_train = st.session_state.y_train
+        try:
+            from xgboost import XGBClassifier, XGBRegressor
+            xgboost_available = True
+        except ImportError:
+            xgboost_available = False
+
+        # 1. Define models
+        classification_models = {
+            "Logistic Regression": LogisticRegression(),
+            "K-Nearest Neighbors (KNN)": KNeighborsClassifier(),
+            "Decision Tree": DecisionTreeClassifier(),
+            "Random Forest": RandomForestClassifier(),
+            "Support Vector Machine (SVM)": SVC(),
+            "Naive Bayes": GaussianNB(),
+            "Gradient Boosting": GradientBoostingClassifier(),
+        }
+
+        regression_models = {
+            "Linear Regression": LinearRegression(),
+            "KNN Regressor": KNeighborsRegressor(),
+            "Decision Tree Regressor": DecisionTreeRegressor(),
+            "Random Forest Regressor": RandomForestRegressor(),
+            "Support Vector Regressor (SVR)": SVR(),
+            "Ridge Regression": Ridge(),
+            "Lasso Regression": Lasso(),
+            "Gradient Boosting Regressor": GradientBoostingRegressor(),
+        }
+
+        if xgboost_available:
+            classification_models["XGBoost"] = XGBClassifier()
+            regression_models["XGBoost Regressor"] = XGBRegressor()
+
+        # 2. Infer task from y_train
+        inferred_task = 'Classification' if y_train.dtype == 'object' or y_train.nunique() < 10 else 'Regression'
+        model_type_choice = st.radio("Select the type of model you want to build:", ["Classification", "Regression"])
+
+        # 3. Dropdown based on selected category
+        if model_type_choice == "Classification":
+            model_name = st.selectbox("Select a classification model:", list(classification_models.keys()))
+            model_dict = classification_models
+        else:
+            model_name = st.selectbox("Select a regression model:", list(regression_models.keys()))
+            model_dict = regression_models
+
+        # 4. Hyperparameter Tuning Options
+        tuning_option = st.radio("Want to apply Hyperparameter Tuning?", ["None", "Manual", "Automatic"])
+        manual_params = {}
+
+        if tuning_option == "Manual":
+            st.markdown("### Manual Tuning")
+
+            # Manual Parameters - Classification
+            if model_type_choice == "Classification":
+                if model_name == "K-Nearest Neighbors (KNN)":
+                    manual_params["n_neighbors"] = st.slider("n_neighbors", 1, 20, 5)
+                elif model_name == "Random Forest":
+                    manual_params["n_estimators"] = st.slider("n_estimators", 50, 300, 100)
+                    manual_params["max_depth"] = st.slider("max_depth", 1, 50, 10)
+                elif model_name == "Support Vector Machine (SVM)":
+                    manual_params["C"] = st.number_input("Penalty (C)", value=1.0)
+                    manual_params["kernel"] = st.selectbox("Kernel", ["linear", "rbf", "poly", "sigmoid"])
+                elif model_name == "Gradient Boosting":
+                    manual_params["n_estimators"] = st.slider("n_estimators", 50, 300, 100)
+                    manual_params["learning_rate"] = st.slider("learning_rate", 0.01, 1.0, 0.1)
+
+            # Manual Parameters - Regression
+            else:
+                if model_name == "KNN Regressor":
+                    manual_params["n_neighbors"] = st.slider("n_neighbors", 1, 20, 5)
+                elif model_name == "Random Forest Regressor":
+                    manual_params["n_estimators"] = st.slider("n_estimators", 50, 300, 100)
+                    manual_params["max_depth"] = st.slider("max_depth", 1, 50, 10)
+                elif model_name == "Support Vector Regressor (SVR)":
+                    manual_params["C"] = st.number_input("Penalty (C)", value=1.0)
+                    manual_params["epsilon"] = st.number_input("Epsilon", value=0.1)
+                    manual_params["kernel"] = st.selectbox("Kernel", ["linear", "rbf", "poly", "sigmoid"])
+                elif model_name == "Gradient Boosting Regressor":
+                    manual_params["n_estimators"] = st.slider("n_estimators", 50, 300, 100)
+                    manual_params["learning_rate"] = st.slider("learning_rate", 0.01, 1.0, 0.1)
+                    manual_params["max_depth"] = st.slider("max_depth", 1, 20, 3)
+
+        elif tuning_option == "Automatic":
+            st.markdown("### Automatic Tuning using GridSearchCV")
+            st.info("Predefined grid used for demo (expandable). This may take a few seconds depending on model.")
+
+        # 5. Validate model type vs inferred task
+        if st.button("Build Model"):
+            X_train = st.session_state.X_train
+            y_train = st.session_state.y_train
+
+            if inferred_task != model_type_choice:
+                st.error(f"The selected model type '{model_type_choice}' does not match the target column type ({inferred_task}). Please choose a {inferred_task} model.")
+            else:
+                base_model = model_dict[model_name]
+
+                if tuning_option == "Manual":
+                    selected_model = type(base_model)(**manual_params)
+
+                elif tuning_option == "Automatic":
+                    # Param Grids
+                    param_grids = {
+                        # Classification
+                        "Random Forest": {
+                            "n_estimators": [50, 100],
+                            "max_depth": [5, 10, None]
+                        },
+                        "K-Nearest Neighbors (KNN)": {
+                            "n_neighbors": [3, 5, 7]
+                        },
+                        "Support Vector Machine (SVM)": {
+                            "C": [0.1, 1, 10],
+                            "kernel": ["linear", "rbf"]
+                        },
+                        "Gradient Boosting": {
+                            "n_estimators": [100, 150],
+                            "learning_rate": [0.05, 0.1],
+                            "max_depth": [3, 5]
+                        },
+
+                        # Regression
+                        "Random Forest Regressor": {
+                            "n_estimators": [50, 100],
+                            "max_depth": [5, 10, None]
+                        },
+                        "KNN Regressor": {
+                            "n_neighbors": [3, 5, 7]
+                        },
+                        "Support Vector Regressor (SVR)": {
+                            "C": [0.1, 1, 10],
+                            "epsilon": [0.1, 0.2]
+                        },
+                        "Gradient Boosting Regressor": {
+                            "n_estimators": [100, 150],
+                            "learning_rate": [0.05, 0.1],
+                            "max_depth": [3, 5]
+                        }
+                    }
+
+                    grid_params = param_grids.get(model_name, None)
+
+                    if grid_params:
+                        with st.spinner("Performing Grid Search..."):
+                            grid = GridSearchCV(base_model, grid_params, cv=3, scoring='r2' if inferred_task == 'Regression' else 'accuracy')
+                            grid.fit(X_train, y_train)
+                            selected_model = grid.best_estimator_
+                            st.success(f"Best parameters found: {grid.best_params_}")
+                    else:
+                        st.warning("Automatic tuning not supported for this model. Using default settings.")
+                        selected_model = base_model
+                else:
+                    selected_model = base_model
+
+                try:
+                    selected_model.fit(X_train, y_train)
+                    st.success(f"Model '{model_name}' has been successfully trained!")
+
+                    st.session_state["selected_model"] = selected_model
+                    st.session_state["model_type"] = model_type_choice
+                    st.session_state["model_name"] = model_name
+
+                except Exception as e:
+                    st.error(f"Error during model training: {str(e)}")
+                    
+# ---------------------- MODEL EVALUATION SECTION -----------------------
+    st.markdown("---")
+    st.subheader("Model Evaluation")
+
+    if "selected_model" in st.session_state and "X_test" in st.session_state and "y_test" in st.session_state:
+        model = st.session_state["selected_model"]
+        model_type = st.session_state["model_type"]
+
+        X_test = st.session_state["X_test"]
+        y_test = st.session_state["y_test"]
+
+        try:
+            # Make predictions
+            y_pred = model.predict(X_test)
+            report_text = ""
+            if model_type == "Classification":
+                accuracy = accuracy_score(y_test, y_pred)
+                precision = precision_score(y_test, y_pred, average="weighted", zero_division=0)
+                recall = recall_score(y_test, y_pred, average="weighted", zero_division=0)
+                f1 = f1_score(y_test, y_pred, average="weighted", zero_division=0)
+
+                st.write("**Metrics**")
+                st.write(f"**Accuracy:** {accuracy:.4f}")
+                st.write(f"**Precision:** {precision:.4f}")
+                st.write(f"**Recall:** {recall:.4f}")
+                st.write(f"**F1 Score:** {f1:.4f}")
+
+                # Confusion matrix
+                st.write("## Confusion Matrix")
+                cm = confusion_matrix(y_test, y_pred)
+                fig, ax = plt.subplots(figsize=(5,1))
+                sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", ax=ax)
+                ax.set_xlabel("Predicted")
+                ax.set_ylabel("Actual")
+                st.pyplot(fig)
+                report_text = classification_report(y_test, y_pred)
+
+                # Classification Report
+                from sklearn.metrics import classification_report
+                report = classification_report(y_test, y_pred, zero_division=0, output_dict=True)
+                st.write("### Classification Report")
+                st.dataframe(report)
+
+                # ROC Curve (only for binary)
+                if len(np.unique(y_test)) == 2:
+                    from sklearn.metrics import roc_curve, auc
+
+                    if hasattr(model, "predict_proba"):
+                        y_prob = model.predict_proba(X_test)[:, 1]
+                        fpr, tpr, _ = roc_curve(y_test, y_prob)
+                        roc_auc = auc(fpr, tpr)
+
+                        st.write("### ROC Curve")
+                        fig_roc, ax_roc = plt.subplots()
+                        ax_roc.plot(fpr, tpr, label=f"AUC = {roc_auc:.2f}")
+                        ax_roc.plot([0, 1], [0, 1], linestyle="--")
+                        ax_roc.set_xlabel("False Positive Rate")
+                        ax_roc.set_ylabel("True Positive Rate")
+                        ax_roc.set_title("Receiver Operating Characteristic (ROC) Curve")
+                        ax_roc.legend()
+                        st.pyplot(fig_roc)
+                    else:
+                        st.info("ROC Curve not available: Model does not support probability prediction.")
+            elif model_type == "Regression":
+                mae = mean_absolute_error(y_test, y_pred)
+                mse = mean_squared_error(y_test, y_pred)
+                rmse = np.sqrt(mse)
+                r2 = r2_score(y_test, y_pred)
+
+                st.write("**Metrics**")
+                st.write(f"**Mean Absolute Error (MAE):** {mae:.4f}")
+                st.write(f"**Mean Squared Error (MSE):** {mse:.4f}")
+                st.write(f"**Root Mean Squared Error (RMSE):** {rmse:.4f}")
+                st.write(f"**R² Score:** {r2:.4f}")
+
+                residuals = y_test - y_pred
+                col1, col2 = st.columns(2)
+
+                # 1. Actual vs Predicted
+                with col1:
+                    st.markdown("**Actual vs Predicted**")
+                    fig1, ax1 = plt.subplots()
+                    sns.scatterplot(x=y_test, y=y_pred, ax=ax1)
+                    ax1.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--')
+                    ax1.set_xlabel("Actual")
+                    ax1.set_ylabel("Predicted")
+                    ax1.set_title("Actual vs Predicted")
+                    st.pyplot(fig1)
+
+                # 2. Residuals vs Predicted
+                with col2:
+                    st.markdown("**Residuals vs Predicted**")
+                    fig2, ax2 = plt.subplots()
+                    sns.scatterplot(x=y_pred, y=residuals, ax=ax2)
+                    ax2.axhline(0, color='red', linestyle='--')
+                    ax2.set_xlabel("Predicted")
+                    ax2.set_ylabel("Residuals")
+                    ax2.set_title("Residuals vs Predicted")
+                    st.pyplot(fig2)
+
+                # 3. Distribution of Residuals (below)
+                st.markdown("**Distribution of Residuals**")
+                fig3, ax3 = plt.subplots()
+                sns.histplot(residuals, kde=True, ax=ax3)
+                ax3.set_xlabel("Residuals")
+                ax3.set_title("Distribution of Residuals")
+                st.pyplot(fig3)
+
+                report_text = f"""
+                Mean Absolute Error: {mae:.4f}
+                Mean Squared Error: {mse:.4f}
+                Root Mean Squared Error: {rmse:.4f}
+                R2 Score: {r2:.4f}
+                """
+
+            model_buffer = io.BytesIO()
+            pickle.dump(st.session_state["selected_model"], model_buffer)
+
+            # Create 2 columns
+            col1, col2, col3 = st.columns([1,1.5,0.5])
+
+            # Left column: Download model
+            with col1:
+                st.download_button(
+                    label="Download Trained Model",
+                    data=model_buffer.getvalue(),
+                    file_name="trained_model.pkl",
+                    mime="application/octet-stream"
+                )
+
+            # Right column: Download evaluation report
+            with col3:
+                st.download_button(
+                    label="Download Evaluation Report",
+                    data=report_text,  # This should be a string (your evaluation summary)
+                    file_name="model_evaluation_report.txt",
+                    mime="text/plain"
+                )
+        except Exception as e:
+            st.error(f"Error during evaluation: {str(e)}")
+    else:
+        st.warning("Please build a model and perform train-test split first.")
+
+    st.markdown("---")
+    st.header("Prediction Interface")
+
+    if "selected_model" in st.session_state and "X_train" in st.session_state:
+        model = st.session_state.selected_model
+        X_train = st.session_state.X_train
+
+        pred_option = st.radio("Choose Prediction Input Mode", ["Upload CSV", "Manual Input"])
+
+        if pred_option == "Upload CSV":
+            pred_file = st.file_uploader("Upload new data for prediction", type=["csv"], key="pred_upload")
+            if pred_file is not None:
+                try:
+                    input_df = pd.read_csv(pred_file)
+                    st.write("Uploaded Data Preview:")
+                    st.dataframe(input_df.head())
+
+                    pred_result = model.predict(input_df)
+                    st.subheader("Predictions")
+                    st.write(pred_result)
+
+                    if st.session_state["model_type"] == "Classification" and hasattr(model, "predict_proba"):
+                        st.subheader("Prediction Probabilities")
+                        proba = model.predict_proba(input_df)
+                        st.dataframe(pd.DataFrame(proba, columns=[f"Class {i}" for i in range(proba.shape[1])]))
+
+                except Exception as e:
+                    st.error(f"Error in prediction: {str(e)}")
+
+        elif pred_option == "Manual Input":
+            st.subheader("Enter input values")
+            input_data = []
+            for col in X_train.columns:
+                val = st.text_input(f"{col}", value=str(X_train[col].iloc[0]))
+                input_data.append(val)
+
+            if st.button("Predict"):
+                try:
+                    input_array = np.array(input_data).reshape(1, -1).astype(float)
+                    prediction = model.predict(input_array)
+                    st.success(f"Prediction: {prediction[0]}")
+
+                    if st.session_state["model_type"] == "Classification" and hasattr(model, "predict_proba"):
+                        proba = model.predict_proba(input_array)
+                        st.write("Prediction Probabilities:")
+                        st.dataframe(pd.DataFrame(proba, columns=[f"Class {i}" for i in range(proba.shape[1])]))
+
+                except Exception as e:
+                    st.error(f"Manual input prediction error: {str(e)}")
+    else:
+        st.info("Train a model first to use prediction interface.")
+
+
+else:
+    st.info("Please upload a CSV file to get started.")
+
