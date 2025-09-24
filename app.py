@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import plotly.express as px
+from sklearn.impute import SimpleImputer, KNNImputer
 
 # Page Config
 st.set_page_config(page_title="AutoML-Studio", layout="wide")
@@ -49,7 +50,7 @@ if uploaded_file:
                 <meta http-equiv="refresh" content="0">
             """, unsafe_allow_html=True)
             
-    # Preview
+# --- Preview ---
     
     st.markdown("### Preview of Dataset")
     st.write(f"Shape : {df.shape}")
@@ -59,7 +60,7 @@ if uploaded_file:
     st.markdown("---")
         
         
-    # --- EDA Section ---
+# --- EDA Section ---
     st.header("Explore & Understand Your Data (EDA)")
   
 
@@ -130,7 +131,7 @@ if uploaded_file:
     st.info("You've completed the EDA section. Now you can move to preprocessing!")
     st.markdown("---")
     
-    # ---Feature Extraction ---
+# ---Feature Extraction ---
     st.markdown("## Feature Selection")
     with st.expander("Drop Unwanted Columns"):
         drop_cols = st.multiselect("Select columns to drop from dataset", st.session_state.df_copy.columns.tolist(), key="drop_cols")
@@ -152,7 +153,98 @@ if uploaded_file:
         st.info("No numerical features to generate correlation heatmap.")
     
     st.markdown("---")
+    
+# --- Identify Missing Columns ---
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    numeric_missing_cols = [col for col in numeric_cols if col in df_copy.columns and df_copy[col].isnull().sum() > 0]
+    categorical_missing_cols = [col for col in categorical_cols if col in df_copy.columns and df_copy[col].isnull().sum() > 0]
 
+# --- Handle Missing Numerical Data ---
+    st.markdown("## Handle Missing Data")
+    with st.expander("Handle Missing Numerical Data"):
+        if numeric_missing_cols:
+            selected_num_cols = st.multiselect("Select Numeric Columns to Impute", numeric_missing_cols)
+
+            imputer_type = st.selectbox(
+                "Choose Imputation Strategy",
+                ("Mean", "Median", "Most Frequent", "KNN Imputer")
+            )
+
+            if imputer_type != "KNN Imputer":
+                strategy_map = {
+                    "Mean": "mean",
+                    "Median": "median",
+                    "Most Frequent": "most_frequent"
+                }
+                strategy = strategy_map[imputer_type]
+                if st.button("Impute Numeric Data"):
+                    try:
+                        imp = SimpleImputer(strategy=strategy)
+                        st.session_state.df_copy[selected_num_cols] = imp.fit_transform(st.session_state.df_copy[selected_num_cols])
+                        st.success(f"Missing values imputed using '{strategy}' strategy.")
+                        st.dataframe(st.session_state.df_copy[selected_num_cols].head())
+                    except Exception as e:
+                        st.warning(f"Error: {str(e)}")
+            else:
+                neighbors = st.slider("Select number of neighbors for KNN", min_value=1, max_value=10, value=3)
+                if st.button("Impute using KNN"):
+                    try:
+                        imp = KNNImputer(n_neighbors=neighbors)
+                        st.session_state.df_copy[selected_num_cols] = imp.fit_transform(st.session_state.df_copy[selected_num_cols])
+                        st.success(f"Missing values imputed using KNN with {neighbors} neighbors.")
+                        st.dataframe(st.session_state.df_copy[selected_num_cols].head())
+                    except Exception as e:
+                        st.warning(f"Error: {str(e)}")
+        else:
+            st.info("✅ No missing values found in numeric columns.")
+
+    # --- Handle Missing Categorical Data ---
+    with st.expander("Handle Missing Categorical Data"):
+        if categorical_missing_cols:
+            selected_cat_cols = st.multiselect("Select Categorical Columns to Impute", categorical_missing_cols)
+
+            cat_strategy = st.selectbox(
+                "Choose Imputation Strategy for Categorical Columns",
+                ("Most Frequent", "Constant Value")
+            )
+
+            if cat_strategy == "Most Frequent":
+                if st.button("Impute Categorical (Most Frequent)"):
+                    try:
+                        imp = SimpleImputer(strategy='most_frequent')
+                        st.session_state.df_copy[selected_cat_cols] = imp.fit_transform(
+                            st.session_state.df_copy[selected_cat_cols])
+                        st.success("Missing categorical values filled with most frequent value.")
+                        st.dataframe(st.session_state.df_copy[selected_cat_cols].head())
+                    except Exception as e:
+                        st.warning(f"Error: {str(e)}")
+            else:
+                constant_val = st.text_input("Enter constant value to replace missing data", value="Unknown")
+                if st.button("Impute Categorical (Constant Value)"):
+                    try:
+                        imp = SimpleImputer(strategy='constant', fill_value=constant_val)
+                        st.session_state.df_copy[selected_cat_cols] = imp.fit_transform(
+                            st.session_state.df_copy[selected_cat_cols])
+                        st.success(f"Missing values replaced with constant: '{constant_val}'.")
+                        st.dataframe(st.session_state.df_copy[selected_cat_cols].head())
+                    except Exception as e:
+                        st.warning(f"Error: {str(e)}")
+        else:
+            st.info("No missing values found in categorical columns.")
+            
+    # --- Final Preview of Cleaned Dataset ---
+    st.markdown("---")
+    st.header("Updated Dataset Preview (After Imputation)")
+    st.dataframe(st.session_state.df_copy.head(20))
+    st.success("This is your cleaned dataset after all missing values have been handled.")
+
+    # --- Reset Button ---
+    if st.button("Reset Changes"):
+        st.session_state.df_copy = st.session_state.df_original.copy()
+        st.success("Dataset has been reset to original state.")
+    
+    
 
 
 
