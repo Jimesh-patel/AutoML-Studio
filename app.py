@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,6 +7,7 @@ import matplotlib.pyplot as plt
 import plotly.express as px
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, LabelEncoder
+from sklearn.model_selection import train_test_split
 
 
 
@@ -324,6 +326,43 @@ if uploaded_file:
                     st.warning("Please select at least one column to encode.")
         else:
             st.info("No categorical columns to encode.")
+    st.markdown("---")
+    
+# --- Train-Test Split ---
+    
+    st.header("Train & Test Split")
+    with st.expander("Train-Test Split"):
+        st.subheader("Split Your Dataset")
+        test_size = st.slider("Choose test set size (%)", min_value=10, max_value=50, value=20, step=5)
+        target_col = st.selectbox("Select target column", options=st.session_state.df_copy.columns)
+
+        if st.button("Split Dataset"):
+            try:
+                X = st.session_state.df_copy.drop(columns=[target_col])
+                y = st.session_state.df_copy[target_col]
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size / 100, random_state=42)
+                st.success(f"Dataset split completed ({100 - test_size}% train / {test_size}% test)")
+
+                st.session_state.X_train = X_train
+                st.session_state.X_test = X_test
+                st.session_state.y_train = y_train
+                st.session_state.y_test = y_test
+
+                st.subheader("X_train Preview")
+                st.dataframe(X_train.head())
+                
+                st.subheader("X_test Preview")
+                st.dataframe(X_test.head())
+                
+                st.subheader("y_train Preview")
+                st.dataframe(y_train.head())
+                
+                st.subheader("y_test Preview")
+                st.dataframe(y_test.head())
+
+
+            except Exception as e:
+                st.warning(f"Error during split: {str(e)}")
 
 
 
