@@ -54,7 +54,7 @@ A Streamlit-based Machine Learning dashboard that allows users to **analyze, pre
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/your-username/automl-studio.git
+   git clone https://github.com/Jimesh-patel/AutoML-Studio.git
    cd automl-studio
    ```
 
@@ -62,7 +62,7 @@ A Streamlit-based Machine Learning dashboard that allows users to **analyze, pre
 
    ```bash
    python -m venv venv
-   source venv/bin/activate   # On Windows: venv\Scripts\activate
+   source venv/bin/activate   
    pip install -r requirements.txt
    ```
 
